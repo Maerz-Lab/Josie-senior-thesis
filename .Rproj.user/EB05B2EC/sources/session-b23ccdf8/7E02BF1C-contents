@@ -14,7 +14,8 @@ replacements <- c("Acris gryllys"="Acris gryllus",
                   "Notophtalmus viridescens "="Notophthalmus viridescens", 
                   "Scaphiopus holbrooki"="Scaphiopus holbrookii", 
                   "acris crepitans "="Acris crepitans", 
-                  "Pseudacris nigrita "="Pseudacris nigrita")
+                  "Pseudacris nigrita "="Pseudacris nigrita",
+                  "Scaphiopus holbrookiii" = "Scaphiopus holbrookii")
 DipnetData$Species <- str_replace_all(DipnetData$Species, replacements)
 View(DipnetData)
 library(dplyr)
@@ -86,3 +87,15 @@ replacement1 <- c("Townsend WMA" = "TWMA")
 DipnetData$Site <- str_replace_all(DipnetData$Site, replacement1)
 View(DipnetData)
 unique(DipnetData$WetlandID)
+unique(DipnetData$Species)
+unique(DipnetData$Egg)
+unique(DipnetData$Larvae)
+unique(DipnetData$JuveAdult)
+unique(DipnetData$Call)
+unique(DipnetData$Notes)
+
+##subset data for ARWMA sites
+dat.AWRMA <- subset(DipnetData, Site == "ARWMA")
+##Tiger subset
+dat.AWRMA.tig <- subset(DipnetData, Species == "Ambystoma tigrinum")
+View(dat.AWRMA.tig)
