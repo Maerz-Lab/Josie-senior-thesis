@@ -1,1 +1,4 @@
 # Josie-senior-thesis
+"The objective of this research is to use a long-term data set among wetlands undergoing restoration and reference, unrestored wetlands to determine what terrestrial and aquatic factors including wetland restoration actions are predictive of A. tigrinum occupancy at ARWMA." 
+ 
+"I hypothesize that Tiger salamanders are more likely to breed at wetlands with open canopies and dense emergent vegetation and surrounded by uplands of low canopy cover. I hypothesize that Tiger salamander occupancy will also be positively associated with the filling of historic ditches, removal of tree canopy, and the reintroduction of fire to wetlands since 2019. I also hypothesize that wetlands with greater proximity to a larger number of other wetlands will have higher Tiger salamander occupancy and reduced breeding extinction."
