@@ -406,8 +406,133 @@ jags.pars <- c("beta0", "beta1", "alpha0", "alpha1", "sitesOccupied")
 jags.post.samples <- jags.basic(data=jags.data, inits=jags.inits,
                                 parameters.to.save = jags.pars,
                                 model.file = "tiger.model.txt",
-                                n.chains=3, n.adapt=100, n.burnin=100,
-                                n.iter=5000, parallel=TRUE)
+                                n.chains=3, n.adapt=100, n.burnin=500,
+                                n.iter=7000, parallel=TRUE)
 summary(jags.post.samples)
+#### Test for convergence ####
+plot(jags.post.samples[,1:4])
 
-plot(jags.post.samples)
+# summarizing posteriors into a table#
+(jagssum<- summary(jags.post.samples))
+
+#means
+Dist.Mean.JAGS <- jagssum$statistics["beta1", "Mean"]
+Hydro.Mean.JAGS <- jagssum$statistics["alpha1", "Mean"]
+
+#lower CI
+LCI.dist.JAGS <- jagssum$quantiles["beta1", "2.5%" ]
+LCI.hydro.JAGS <- jagssum$quantiles["alpha1", "2.5%" ]
+
+#upper CI
+UCI.dist.JAGS <- jagssum$quantiles["beta1", "97.5%" ]
+UCI.hydro.JAGS <- jagssum$quantiles["alpha1", "97.5%" ]
+
+#Bayesian p value
+
+
+comparison_table <- data.frame(
+  "Species" = "Ambystoma tigrinum",
+  "Parameter" = c("Distance","Hydroperiod"),
+  "Mean" = c(Dist.Mean.JAGS, Hydro.Mean.JAGS), 
+  "Lower CI" = c(LCI.dist.JAGS, LCI.hydro.JAGS),
+  "Upper CI" = c(UCI.dist.JAGS, UCI.hydro.JAGS)
+)
+
+# compare
+print(comparison_table)
+
+
+# Plot credible intervals
+jagssumstat <- as.data.frame(jagssum$statistics)
+
+ggplot(jagssumstat, aes(x = Parameter, y = Mean)) +
+  geom_point(size = 3) +  # Mean point
+  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +  # Credible interval
+  labs(
+    title = "Parameter Estimates with 95% Credible Intervals",
+    x = "Parameter",
+    y = "Estimate"
+  ) +
+  theme_minimal()
+
+#  Shows parameters on x-axis and mean estimate as a dot and the 95% credible interval as a line.
+
+
+########## OCCUPANCY PROBABILITY
+#### Plot predicted occupancy probability: Distance to last occupied ####
+# Check if psi.post.pred is correctly filled
+# Set up a sequence for prediction data
+pred.data <- data.frame(distance_scaled = seq(from = min(distance_scaled), to = max(distance_scaled), length = 100), hydro.scaled =0)
+pred.data$distance <- pred.data$distance_scaled*(sd(distance))+(mean(distance))
+pred.data$hydro <- rep(0, nrow(pred.data))  # holding hydro constant at zero if that's the intention
+
+
+# Create a matrix to store predictions across MCMC samples
+n.iter <- nrow(psi.coef.post)  # number of iterations in posterior samples
+psi.post.pred <- matrix(NA, nrow = n.iter, ncol = nrow(pred.data))
+
+# Calculate predictions
+for(i in 1:n.iter) {
+  psi.post.pred[i, ] <- plogis(psi.coef.post[i, "beta0"] +
+                                 psi.coef.post[i, "beta1"] * pred.data$distance_scaled
+                                )
+}
+
+# Check the structure of psi.post.pred to ensure it's filled
+head(psi.post.pred)
+
+# Calculate mean and credible intervals for the predictions
+pred.post.mean <- colMeans(psi.post.pred)
+pred.post.lower <- apply(psi.post.pred, 2, quantile, prob = 0.025)
+pred.post.upper <- apply(psi.post.pred, 2, quantile, prob = 0.975)
+
+# Plot the predicted occupancy probability against distance
+plot(pred.data$distance, psi.post.pred[1,], type="l", xlab="Distance to nearest occupied wetland (meters)",  
+     ylab="Occurrence probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
+for(i in 1:n.iter) {
+  lines(pred.data$distance, psi.post.pred[i,], col=gray(0.8))
+} # posterior predictive distribution
+lines(pred.data$distance, pred.post.mean, col="blue") #mean
+lines(pred.data$distance, pred.post.lower, col="blue", lty=2) #lower CI
+lines(pred.data$distance, pred.post.upper, col="blue", lty=2) #upper CI
+
+
+
+
+
+
+
+####### DETECTION PROBABILITY
+pred.data2 <- data.frame(hydro.scaled = seq(from = min(hydro.scaled), to =5, length = 100), distance_scaled =0)
+pred.data2$hydro <- pred.data2$hydro.scaled*(sd(hydro))+(mean(hydro))
+pred.data2$distance <- rep(0, nrow(pred.data2))  # holding hydro constant at zero if that's the intention
+
+
+# Create a matrix to store predictions across MCMC samples
+n.iter <- nrow(psi.coef.post)  # number of iterations in posterior samples
+psi.post.pred2 <- matrix(NA, nrow = n.iter, ncol = nrow(pred.data2))
+
+# Calculate predictions
+for(i in 1:n.iter) {
+  psi.post.pred2[i, ] <- plogis(psi.coef.post[i, "alpha0"] +
+                                 psi.coef.post[i, "alpha1"] * pred.data2$hydro.scaled
+  )
+}
+
+# Check the structure of psi.post.pred to ensure it's filled
+head(psi.post.pred2)
+
+# Calculate mean and credible intervals for the predictions
+pred.post.mean <- colMeans(psi.post.pred2)
+pred.post.lower <- apply(psi.post.pred2, 2, quantile, prob = 0.025)
+pred.post.upper <- apply(psi.post.pred2, 2, quantile, prob = 0.975)
+
+# Plot the predicted occupancy probability against distance
+plot(pred.data2$hydro, psi.post.pred2[1,], type="l", xlab="Hydroperiod (months)", xlim = c(0,12),  
+     ylab="Occurrence probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
+for(i in 1:n.iter) {
+  lines(pred.data2$hydro, psi.post.pred2[i,], col=gray(0.8))
+} # posterior predictive distribution
+lines(pred.data2$hydro, pred.post.mean, col="blue") #mean
+lines(pred.data2$hydro, pred.post.lower, col="blue", lty=2) #lower CI
+lines(pred.data2$hydro, pred.post.upper, col="blue", lty=2) #upper CI
