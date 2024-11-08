@@ -529,10 +529,9 @@ pred.post.upper <- apply(psi.post.pred2, 2, quantile, prob = 0.975)
 
 # Plot the predicted occupancy probability against distance
 plot(pred.data2$hydro, psi.post.pred2[1,], type="l", xlab="Hydroperiod (months)", xlim = c(0,12),  
-     ylab="Occurrence probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
+     ylab="Detection probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
 for(i in 1:n.iter) {
-  lines(pred.data2$hydro, psi.post.pred2[i,], col=gray(0.8))
-} # posterior predictive distribution
-lines(pred.data2$hydro, pred.post.mean, col="blue") #mean
-lines(pred.data2$hydro, pred.post.lower, col="blue", lty=2) #lower CI
-lines(pred.data2$hydro, pred.post.upper, col="blue", lty=2) #upper CI
+  lines(pred.data2$hydro, psi.post.pred2[i,], col = rgb(0,0,1, alpha = 0.025)) } # posterior predictive distribution
+lines(pred.data2$hydro, pred.post.mean, col="gray") #mean
+lines(pred.data2$hydro, pred.post.lower, col="gray", lty=2) #lower CI
+lines(pred.data2$hydro, pred.post.upper, col="gray", lty=2) #upper CI

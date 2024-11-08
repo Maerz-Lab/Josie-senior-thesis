@@ -141,3 +141,7 @@ ARWMA_2024 <- ARWMA_2024 %>%
     Time = format(Date.and.Time, "%H:%M:%S")    # Reformat to HH:MM:SS (24-hour format)
   )
 
+write.csv(DipnetData, "CleanedDipnetData.csv", row.names = FALSE)
+write.csv(ARWMA_2024, "CleanedDipnet2024.csv", row.names = FALSE)
+unique(ARWMA_2024$Wetland.ID)
+unique(ARWMA_2024)
