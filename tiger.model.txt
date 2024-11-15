@@ -4,13 +4,16 @@
     #priors for occupancy/site coefficients
     beta0 ~ dnorm(0, 0.5)
     beta1 ~ dnorm(0, 0.5)
+    beta2 ~ dlogis(0, 1)
+    beta3 ~ dlogis(0, 1)
+    beta4 ~ dlogis(0, 1)
     
     #detection/observation covariate
     alpha0 ~ dnorm(0, 0.5)
     alpha1 ~ dnorm(0, 0.5)
     
     for(i in 1:nSites) {
-      logit(psi[i]) <- beta0 + beta1*dist[i]
+      logit(psi[i]) <- beta0 + beta1*dist[i]+ beta2*plug[i]+ beta3*thin[i]+ beta4*fire[i]
       z[i] ~ dbern(psi[i])
     
     for(j in 1:nOccasions) {

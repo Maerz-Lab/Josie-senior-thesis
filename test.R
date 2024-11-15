@@ -1,13 +1,15 @@
-install.packages("rmarkdown")
 library(rmarkdown)
-render("test.Rmd")
-DipnetData <- read.csv("ARWMA DipnetSurveyData_Aug-24-2023.csv")
+
 library(stringr)
 library(lubridate)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(jagsUI)
+library(rjags)
+library(coda)
 
+DipnetData <- read.csv("ARWMA DipnetSurveyData_Aug-24-2023.csv")
 DipnetData <- DipnetData[!DipnetData$Year %in% c("View(DipnetData)", 
                                                  "DipnetData <- read.csv(ARWMA DipnetSurveyData_Aug-24-2023.csv)" ),]
 DipnetData$Year <- str_replace_all(DipnetData$Year, "2021 June", "2021")
@@ -165,7 +167,7 @@ DipnetData$JuveAdult <- as.numeric(DipnetData$JuveAdult)
 # Check the result
 str(DipnetData)
 # Ensure every WetlandID-Year combination is present (even if no data exists)
-library(tidyr)
+
 
 # Create a full grid of WetlandID and Year combinations, and then join with presence/absence matrix
 wetland_year_grid <- expand.grid(WetlandID = unique(DipnetData$WetlandID),
@@ -317,6 +319,17 @@ salamander1 <- salamander1 %>%
 
 
 
+
+##adding in management as variable
+
+treatment.data <- read.csv("Wetland_Level_Data.csv")
+
+new_row <- data.frame(WetlandID = 4, CanopyCover = "NA", CanopyThinning = 0, Fire = 0, DitchFilling = 0)
+treatment.data2 <- rbind(treatment.data, new_row)
+
+salamander2 <- merge(salamander1, treatment.data2, by = "WetlandID")
+
+
 ##Occupancy Model
 nSites <- length(unique(salamander1$WetlandID))
 nVisits <- 6
@@ -336,8 +349,13 @@ effort
 #site covariates 
 distance <- salamander1$distance
 
+Fire <- as.numeric(salamander2$Fire)
+DitchFilling <- as.numeric(salamander2$DitchFilling)
+CanopyThinning <- as.numeric(salamander2$CanopyThinning)
+
+
 #observation covariates
-hydro.matrix <- as.matrix(salamander1)
+hydro.matrix <- as.matrix(salamander2)
 hydro.matrix <- apply(hydro.matrix, 2, as.numeric)
 
 hydro.mat <- c("year_2019", "year_2020", "year_2021", "year_2022", "year_2023", "hydroperiod.24")
@@ -361,7 +379,7 @@ hydro.scaled <- apply(hydro, 2, function(x) {
 distance_scaled <- (distance-mean(distance))/sd(distance)
 
 
-library("jagsUI")
+
 
 
 cat(file = "tiger.model.txt",
@@ -371,13 +389,16 @@ cat(file = "tiger.model.txt",
     #priors for occupancy/site coefficients
     beta0 ~ dnorm(0, 0.5)
     beta1 ~ dnorm(0, 0.5)
+    beta2 ~ dlogis(0, 1)
+    beta3 ~ dlogis(0, 1)
+    beta4 ~ dlogis(0, 1)
     
     #detection/observation covariate
     alpha0 ~ dnorm(0, 0.5)
     alpha1 ~ dnorm(0, 0.5)
     
     for(i in 1:nSites) {
-      logit(psi[i]) <- beta0 + beta1*dist[i]
+      logit(psi[i]) <- beta0 + beta1*dist[i]+ beta2*plug[i]+ beta3*thin[i]+ beta4*fire[i]
       z[i] ~ dbern(psi[i])
     
     for(j in 1:nOccasions) {
@@ -393,24 +414,28 @@ cat(file = "tiger.model.txt",
 
 
 #data into named list
-jags.data <- list(y=salamander.matrix, hydro=hydro.scaled, dist=distance_scaled, nSites=nSites, nOccasions=nVisits, effort=effort)
+jags.data <- list(y=salamander.matrix, hydro=hydro.scaled, dist=distance_scaled, nSites=nSites, nOccasions=nVisits, effort=effort, plug = DitchFilling, thin = CanopyThinning, fire = Fire)
 
 #initial values
 jags.inits <- function(){list(beta0=rnorm(1), alpha0=rnorm(1), z=rep(1, nSites))
 }
 
 #parameters to be monitored
-jags.pars <- c("beta0", "beta1", "alpha0", "alpha1", "sitesOccupied")
+jags.pars <- c("beta0", "beta1", "beta2", "beta3", "beta4", "alpha0", "alpha1", "sitesOccupied")
 
 #MCMC
+
 jags.post.samples <- jags.basic(data=jags.data, inits=jags.inits,
                                 parameters.to.save = jags.pars,
                                 model.file = "tiger.model.txt",
                                 n.chains=3, n.adapt=100, n.burnin=500,
                                 n.iter=7000, parallel=TRUE)
 summary(jags.post.samples)
+
+
 #### Test for convergence ####
-plot(jags.post.samples[,1:4])
+quartz()
+plot(jags.post.samples[,1:7])
 
 # summarizing posteriors into a table#
 (jagssum<- summary(jags.post.samples))
@@ -442,10 +467,10 @@ comparison_table <- data.frame(
 print(comparison_table)
 
 
-# Plot credible intervals
+# Plot credible intervals ?????????????????
 jagssumstat <- as.data.frame(jagssum$statistics)
 
-ggplot(jagssumstat, aes(x = Parameter, y = Mean)) +
+ggplot(jagssumstat, aes(x = "Parameter", y = "Mean")) +
   geom_point(size = 3) +  # Mean point
   geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +  # Credible interval
   labs(
@@ -462,10 +487,13 @@ ggplot(jagssumstat, aes(x = Parameter, y = Mean)) +
 #### Plot predicted occupancy probability: Distance to last occupied ####
 # Check if psi.post.pred is correctly filled
 # Set up a sequence for prediction data
+##is this right
+
 pred.data <- data.frame(distance_scaled = seq(from = min(distance_scaled), to = max(distance_scaled), length = 100), hydro.scaled =0)
 pred.data$distance <- pred.data$distance_scaled*(sd(distance))+(mean(distance))
 pred.data$hydro <- rep(0, nrow(pred.data))  # holding hydro constant at zero if that's the intention
-
+psi.coef.post <- as.matrix(jags.post.samples[,c("beta0", "beta1", "beta2", "beta3", "beta4", "alpha0", "alpha1")])
+head(psi.coef.post)
 
 # Create a matrix to store predictions across MCMC samples
 n.iter <- nrow(psi.coef.post)  # number of iterations in posterior samples
@@ -487,6 +515,7 @@ pred.post.lower <- apply(psi.post.pred, 2, quantile, prob = 0.025)
 pred.post.upper <- apply(psi.post.pred, 2, quantile, prob = 0.975)
 
 # Plot the predicted occupancy probability against distance
+quartz()
 plot(pred.data$distance, psi.post.pred[1,], type="l", xlab="Distance to nearest occupied wetland (meters)",  
      ylab="Occurrence probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
 for(i in 1:n.iter) {
@@ -528,10 +557,43 @@ pred.post.lower <- apply(psi.post.pred2, 2, quantile, prob = 0.025)
 pred.post.upper <- apply(psi.post.pred2, 2, quantile, prob = 0.975)
 
 # Plot the predicted occupancy probability against distance
+quartz()
 plot(pred.data2$hydro, psi.post.pred2[1,], type="l", xlab="Hydroperiod (months)", xlim = c(0,12),  
      ylab="Detection probability", ylim=c(0, 1), col=gray(0.8)) #prediction line for first posterior samples
 for(i in 1:n.iter) {
-  lines(pred.data2$hydro, psi.post.pred2[i,], col = rgb(0,0,1, alpha = 0.025)) } # posterior predictive distribution
-lines(pred.data2$hydro, pred.post.mean, col="gray") #mean
-lines(pred.data2$hydro, pred.post.lower, col="gray", lty=2) #lower CI
-lines(pred.data2$hydro, pred.post.upper, col="gray", lty=2) #upper CI
+  lines(pred.data2$hydro, psi.post.pred2[i,], col = rgb(0,1,0, alpha = 0.01)) } # posterior predictive distribution
+lines(pred.data2$hydro, pred.post.mean, col="black") #mean
+lines(pred.data2$hydro, pred.post.lower, col="black", lty=2) #lower CI
+lines(pred.data2$hydro, pred.post.upper, col="black", lty=2) #upper CI
+                       # Use minimal theme
+
+##BAYESPostEst ???
+mod.rjags <- jags.model(file = "tiger.model.txt", data = jags.data, inits = jags.inits,
+                        n.chains = 3, n.adapt = 1000)
+#> Compiling model graph
+#>    Resolving undeclared variables
+#>    Allocating nodes
+#> Graph information:
+#>    Observed stochastic nodes: 1421
+#>    Unobserved stochastic nodes: 4
+#>    Total graph size: 6864
+#> 
+#> Initializing model
+quartz()
+fit.rjags <- coda.samples(model = mod.rjags,
+                          variable.names = jags.pars,
+                          n.iter = 7000)
+
+#potentially cool graph ???????
+
+library("ggplot2")
+library("ggridges")
+ggplot(data = pred.data, 
+       aes(y = factor(x), x = pred.post.mean)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), vline_color = "white") + 
+  scale_y_discrete(labels = c("Male", "Female")) + 
+  ylab("") + 
+  xlab("Estimated probability of volunteering") + 
+  labs(title = "Probability based on average-case approach") +
+  theme_minimal()
