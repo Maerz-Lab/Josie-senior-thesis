@@ -168,7 +168,11 @@ DipnetData$JuveAdult <- as.numeric(DipnetData$JuveAdult)
 str(DipnetData)
 # Ensure every WetlandID-Year combination is present (even if no data exists)
 
-
+##*********************************************************************************************************
+  
+  
+  
+  
 # Create a full grid of WetlandID and Year combinations, and then join with presence/absence matrix
 wetland_year_grid <- expand.grid(WetlandID = unique(DipnetData$WetlandID),
                                  Year = unique(DipnetData$Year))
@@ -440,16 +444,27 @@ plot(jags.post.samples[,1:7])
 # summarizing posteriors into a table#
 (jagssum<- summary(jags.post.samples))
 
+
+
 #means
 Dist.Mean.JAGS <- jagssum$statistics["beta1", "Mean"]
+Ditch.Mean.JAGS <- jagssum$statistics["beta2", "Mean"]
+Canopy.Mean.JAGS <- jagssum$statistics["beta3", "Mean"]
+Fire.Mean.JAGS <- jagssum$statistics["beta4", "Mean"]
 Hydro.Mean.JAGS <- jagssum$statistics["alpha1", "Mean"]
 
 #lower CI
 LCI.dist.JAGS <- jagssum$quantiles["beta1", "2.5%" ]
+LCI.ditch.JAGS <- jagssum$quantiles["beta2", "2.5%"]
+LCI.canopy.JAGS <- jagssum$quantiles["beta3", "2.5%"]
+LCI.fire.JAGS <- jagssum$quantiles["beta4", "2.5%"]
 LCI.hydro.JAGS <- jagssum$quantiles["alpha1", "2.5%" ]
 
 #upper CI
 UCI.dist.JAGS <- jagssum$quantiles["beta1", "97.5%" ]
+UCI.ditch.JAGS <- jagssum$quantiles["beta2", "97.5%"]
+UCI.canopy.JAGS <- jagssum$quantiles["beta3", "97.5%"]
+UCI.fire.JAGS <- jagssum$quantiles["beta4", "97.5%"]
 UCI.hydro.JAGS <- jagssum$quantiles["alpha1", "97.5%" ]
 
 #Bayesian p value
@@ -457,28 +472,15 @@ UCI.hydro.JAGS <- jagssum$quantiles["alpha1", "97.5%" ]
 
 comparison_table <- data.frame(
   "Species" = "Ambystoma tigrinum",
-  "Parameter" = c("Distance","Hydroperiod"),
-  "Mean" = c(Dist.Mean.JAGS, Hydro.Mean.JAGS), 
-  "Lower CI" = c(LCI.dist.JAGS, LCI.hydro.JAGS),
-  "Upper CI" = c(UCI.dist.JAGS, UCI.hydro.JAGS)
+  "Parameter" = c("Distance","Hydroperiod", "Ditch Filling", "Canopy Thinning", "Fire"),
+  "Mean" = c(Dist.Mean.JAGS, Hydro.Mean.JAGS, Ditch.Mean.JAGS, Canopy.Mean.JAGS, Fire.Mean.JAGS), 
+  "Lower CI" = c(LCI.dist.JAGS, LCI.hydro.JAGS, LCI.ditch.JAGS, LCI.canopy.JAGS, LCI.fire.JAGS),
+  "Upper CI" = c(UCI.dist.JAGS, UCI.hydro.JAGS, UCI.ditch.JAGS, UCI.canopy.JAGS, UCI.fire.JAGS)
 )
 
 # compare
 print(comparison_table)
 
-
-# Plot credible intervals ?????????????????
-jagssumstat <- as.data.frame(jagssum$statistics)
-
-ggplot(jagssumstat, aes(x = "Parameter", y = "Mean")) +
-  geom_point(size = 3) +  # Mean point
-  geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +  # Credible interval
-  labs(
-    title = "Parameter Estimates with 95% Credible Intervals",
-    x = "Parameter",
-    y = "Estimate"
-  ) +
-  theme_minimal()
 
 #  Shows parameters on x-axis and mean estimate as a dot and the 95% credible interval as a line.
 
@@ -567,33 +569,312 @@ lines(pred.data2$hydro, pred.post.lower, col="black", lty=2) #lower CI
 lines(pred.data2$hydro, pred.post.upper, col="black", lty=2) #upper CI
                        # Use minimal theme
 
-##BAYESPostEst ???
-mod.rjags <- jags.model(file = "tiger.model.txt", data = jags.data, inits = jags.inits,
-                        n.chains = 3, n.adapt = 1000)
-#> Compiling model graph
-#>    Resolving undeclared variables
-#>    Allocating nodes
-#> Graph information:
-#>    Observed stochastic nodes: 1421
-#>    Unobserved stochastic nodes: 4
-#>    Total graph size: 6864
-#> 
-#> Initializing model
-quartz()
-fit.rjags <- coda.samples(model = mod.rjags,
-                          variable.names = jags.pars,
-                          n.iter = 7000)
 
 #potentially cool graph ???????
+# Check the structure of jags.post.samples
 
-library("ggplot2")
-library("ggridges")
-ggplot(data = pred.data, 
-       aes(y = factor(x), x = pred.post.mean)) + 
+samples_matrix <- as.matrix(jags.post.samples)
+beta2_samples <- samples_matrix[, "beta2"]  # DitchFilling
+beta3_samples <- samples_matrix[, "beta3"]  # Canopy Thinning
+beta4_samples <- samples_matrix[, "beta4"]  # Fire
+management_effects <- data.frame(
+  Parameter = rep(c("Ditch Filling", "Canopy Thinning", "Fire"), each = length(beta2_samples)),
+  Value = c(beta2_samples, beta3_samples, beta4_samples)
+)
+
+
+library(ggplot2)
+library(ggridges)
+
+
+# Plot the ridge density plot
+quartz()
+ridges <- ggplot(data = management_effects, 
+       aes(y = factor(Parameter), x = Value)) + 
+  stat_density_ridges(quantile_lines = TRUE, 
+                      quantiles = c(0.025, 0.5, 0.975), vline_color = "white") + 
+  scale_y_discrete(labels = c("Ditch Filling", "Canopy Thinning", "Fire")) + 
+  ylab("") + 
+  xlab("Estimated Impact on Occupancy Probability") +  # Adjust the label based on your parameter
+  labs(title = "Posterior Distribution of Management Strategies Impact") +
+  theme_minimal()
+print(ridges)
+
+
+ggplot(data = obsprob.female.jags, 
+       aes(y = factor(x), x = pp)) + 
   stat_density_ridges(quantile_lines = TRUE, 
                       quantiles = c(0.025, 0.5, 0.975), vline_color = "white") + 
   scale_y_discrete(labels = c("Male", "Female")) + 
   ylab("") + 
   xlab("Estimated probability of volunteering") + 
-  labs(title = "Probability based on average-case approach") +
+  labs(title = "Probability based on observed-case approach") +
   theme_minimal()
+
+library(ggplot2)
+
+bayes.p <- as.matrix(jags.data)
+T_obs <- sum(bayes.p$y, na.rm = TRUE)  # Sum of observed detections
+# Initialize storage for simulated test statistics
+T_rep <- numeric(length = length(beta0_samples))
+
+for (i in 1:length(jags.pars)) {
+  # Sample posterior parameters
+  beta0_i <- beta0_samples[i]
+  beta1_i <- beta1_samples[i]
+  beta2_i <- beta2_samples[i]
+  beta3_i <- beta3_samples[i]
+  beta4_i <- beta4_samples[i]
+  alpha0_i <- alpha0_samples[i]
+  alpha1_i <- alpha1_samples[i]
+  
+  # Simulate occupancy probabilities
+  psi_sim <- plogis(beta0_i + beta1_i * jags.data$dist +
+                      beta2_i * jags.data$plug + 
+                      beta3_i * jags.data$thin +
+                      beta4_i * jags.data$fire)
+  
+  # Simulate detection probabilities
+  p_sim <- plogis(alpha0_i + alpha1_i * jags.data$hydro)
+  
+  # Simulate occupancy and detection
+  z_sim <- rbinom(jags.data$nSites, 1, psi_sim)
+}               
+bayesian_p_value <- mean(T_rep >= T_obs)
+print(bayesian_p_value)
+
+
+
+library(ggplot2)
+
+# Convert to a data frame for ggplot
+parameters_df <- as.data.frame(samples_matrix)
+quartz()
+# Example: Plot for beta1 (Distance)
+parameterplot <- ggplot(parameters_df, aes(x = beta2)) +
+  geom_density(fill = "skyblue", alpha = 0.5) +
+  geom_vline(xintercept = mean(parameters_df$beta1), color = "red", linetype = "dashed") +
+  labs(title = "Posterior Distribution of Ditch Filling Parameter (beta2)",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(parameterplot)
+# Repeat for other parameters (beta2, beta3, etc.)
+
+# Convert to a data frame for ggplot
+parameters_df <- as.data.frame(samples_matrix)
+quartz()
+# Example: Plot for beta1 (Distance)
+parameterplot2 <- ggplot(parameters_df, aes(x = beta3)) +
+  geom_density(fill = "skyblue", alpha = 0.5) +
+  geom_vline(xintercept = mean(parameters_df$beta1), color = "red", linetype = "dashed") +
+  labs(title = "Posterior Distribution of Canopy Thinning Parameter (beta3)",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(parameterplot2)
+
+# Convert to a data frame for ggplot
+parameters_df <- as.data.frame(samples_matrix)
+quartz()
+# Example: Plot for beta1 (Distance)
+parameterplot3 <- ggplot(parameters_df, aes(x = beta4)) +
+  geom_density(fill = "skyblue", alpha = 0.5) +
+  geom_vline(xintercept = mean(parameters_df$beta1), color = "red", linetype = "dashed") +
+  labs(title = "Posterior Distribution of Fire Parameter (beta4)",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(parameterplot3)
+# Repeat for other para
+# Repeat for other para
+
+
+
+library(tidyr)
+parameters_long <- parameters_df %>%
+  pivot_longer(cols = everything(),
+               names_to = "Parameter",
+               values_to = "Value")
+
+# Plot all parameter distributions in one graph
+library(ggplot2)
+quartz()
+combined_plot <- ggplot(parameters_long, aes(x = Value, fill = Parameter)) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ Parameter, scales = "free") +
+  labs(title = "Posterior Distributions of Parameters",
+       x = "Value",
+       y = "Density") +
+  theme_minimal() +
+  theme(legend.position = "none") # Hide legend since we use faceting
+print(combined_plot)
+
+
+
+parameters_long <- parameters_df %>%
+  pivot_longer(cols = everything(),
+               names_to = "Parameter",
+               values_to = "Value")
+
+# Plot all parameter distributions on one graph
+library(ggplot2)
+quartz()
+combined_plot <- ggplot(parameters_long, aes(x = Value, color = Parameter, fill = Parameter)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "Posterior Distributions of Parameters",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(combined_plot)
+
+
+# Convert samples_matrix to a data frame
+parameters_df <- as.data.frame(samples_matrix)
+
+# Reshape to long format and filter for specific parameters
+library(tidyr)
+parameters_long <- parameters_df %>%
+  pivot_longer(cols = c(beta2, beta3, beta4),  # Include only beta2, beta3, and beta4
+               names_to = "Parameter",
+               values_to = "Value")
+
+# Plot the selected parameter distributions on one graph
+library(ggplot2)
+quartz()
+combined_plot <- ggplot(parameters_long, aes(x = Value, color = Parameter, fill = Parameter)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "Posterior Distributions of Selected Parameters",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(combined_plot)
+
+library(tidyr)
+parameters_long2 <- parameters_df %>%
+  pivot_longer(cols = c(alpha1, beta1, beta2, beta3, beta4),  # Include only beta2, beta3, and beta4
+               names_to = "Parameter",
+               values_to = "Value")
+
+quartz()
+combined_plot2 <- ggplot(parameters_long2, aes(x = Value, color = Parameter, fill = Parameter)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "Posterior Distributions of Selected Parameters",
+       x = "Value",
+       y = "Density") +
+  theme_minimal()
+print(combined_plot2)
+
+
+
+# Create the initial plot to set up the window
+plot(distance_scaled, rep(NA, length(distance_scaled)), type = "n", 
+     xlab = "Distance", ylab = "Predicted Occupancy",
+     xlim = range(distance_scaled), ylim = c(0, 1))
+
+# Loop through each management strategy
+management_strategies <- c("fire", "ditch", "canopy")
+colors <- c("red", "blue", "green")  # Color for each management strategy
+
+for (i in 1:length(management_strategies)) {
+  strategy <- management_strategies[i]
+  pred.data[[strategy]] <- rep(1, nrow(pred.data))  # Set the management strategy to "active"
+  
+  # Recalculate predictions holding each strategy constant
+  psi.coef.post <- as.matrix(jags.post.samples[, c("beta0", "beta1", "beta2", "beta3", "beta4", "alpha0", "alpha1")])
+  psi.post.pred <- matrix(NA, nrow = n.iter, ncol = nrow(pred.data))
+  
+  for (j in 1:n.iter) {
+    # Adjust for the current management strategy using the correct beta value
+    if (strategy == "fire") {
+      psi.post.pred[j, ] <- plogis(psi.coef.post[j, "beta0"] + 
+                                     psi.coef.post[j, "beta1"] * pred.data$distance_scaled + 
+                                     psi.coef.post[j, "beta4"] * pred.data$fire)  # Use beta4 for fire
+    } else if (strategy == "ditch") {
+      psi.post.pred[j, ] <- plogis(psi.coef.post[j, "beta0"] + 
+                                     psi.coef.post[j, "beta1"] * pred.data$distance_scaled + 
+                                     psi.coef.post[j, "beta2"] * pred.data$ditch)  # Use beta2 for ditch
+    } else if (strategy == "canopy") {
+      psi.post.pred[j, ] <- plogis(psi.coef.post[j, "beta0"] + 
+                                     psi.coef.post[j, "beta1"] * pred.data$distance_scaled + 
+                                     psi.coef.post[j, "beta3"] * pred.data$canopy)  # Use beta3 for canopy
+    }
+  }
+  
+  # Plot for each management strategy
+  pred.post.mean <- colMeans(psi.post.pred)
+  pred.post.lower <- apply(psi.post.pred, 2, quantile, prob = 0.025)
+  pred.post.upper <- apply(psi.post.pred, 2, quantile, prob = 0.975)
+  
+  lines(pred.data$distance, pred.post.mean, col = colors[i], lwd = 2)
+  lines(pred.data$distance, pred.post.lower, col = colors[i], lty = 2)
+  lines(pred.data$distance, pred.post.upper, col = colors[i], lty = 2)
+}
+
+# Add a legend to describe each strategy
+legend("topright", legend = management_strategies, col = colors, lty = 1:2, cex = 0.8)
+
+is.na(salamander)
+newsalamander <- salamander[, -c(1, 8, 9)]
+newsalamander <- colSums(newsalamander, na.rm = TRUE) / nrow(newsalamander) * 100
+
+percentage_occupied <- colSums(newsalamander) / nrow(newsalamander) * 100
+years <- 2019:2024  # Adjust based on your actual year range
+percentage_df <- data.frame(year = years, percentage_occupied = percentage_occupied)
+quartz()
+percentagegraph <- ggplot(percentage_df, aes(x = year, y = percentage_occupied)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 3) +
+  labs(title = "Percentage of Wetlands Occupied Over Time",
+       x = "Year",
+       y = "Percentage of Wetlands Occupied (%)") +
+  theme_minimal()
+print(percentagegraph)
+# View the percentage occupied for each year
+percentage_occupied
+
+
+hydro.sal <- hydro.data.dip[, -c(1,2)]
+
+
+
+
+
+
+# Ensure that your matrix is correctly structured with years as columns
+# Assuming each column represents a year and rows represent wetlands.
+
+# Calculate the percentage of wetlands occupied for each year
+percentage_occupied <- colSums(salamander.matrix != 0) / nrow(salamander.matrix) * 100
+
+# Adjust the years range to match the number of columns in your matrix
+years <- 2019:(2019 + ncol(salamander.matrix) - 1)
+
+# Create a data frame for plotting
+percentage_df <- data.frame(year = years, percentage_occupied = percentage_occupied)
+
+# Plot the data
+quartz()
+percentagegraph <- ggplot(percentage_df, aes(x = year, y = percentage_occupied)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 3) +
+  labs(title = "Percentage of Wetlands Occupied Over Time",
+       x = "Year",
+       y = "Percentage of Wetlands Occupied (%)") +
+  theme_minimal()
+
+print(percentagegraph)
+
+
+
+
+quartz()
+distancegraph <- ggplot(final.dat, aes(x = year, y = distance)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 3) +
+  labs(title = "Percentage of Wetlands Occupied Over Time",
+       x = "Year",
+       y = "Percentage of Wetlands Occupied (%)") +
+  theme_minimal()
+
+print(distancegraph)
